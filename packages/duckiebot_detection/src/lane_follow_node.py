@@ -133,32 +133,36 @@ class LaneFollowNode(DTROS):
         if self.id_num == 9999:
             rospy.signal_shutdown("Done!")
         if self.id_num == 1000:
-            # print("stopping")
+            print("stopping")
             self.stop(3)
             self.id_num = 0
             self.velocity = 0.26
         if self.id_num == 2000:
-            # print("stopping before ducks)
-            self.stop(1)
-            self.id_num = 0
+            print("stopping before ducks")
+            # self.stop(3)
+            self.stop_until()
             self.velocity = 0.0
         elif self.id_num == 56:
             self.stop(3)
             self.straight(self.id_num)
             self.id_num = 0
         elif self.id_num == 48:
-            # print("right")              
+            print("right")              
             self.stop(3)
             self.right(self.id_num)
             self.id_num = 0
         elif self.id_num == 50:
-            # print("left")               
+            print("left")               
             self.stop(3)
             self.left(self.id_num)
             self.id_num = 0
+        elif self.id_num == 1:
+            print("go stright")               
+            self.straight(self.id_num)
+            self.id_num = 0
 
         else: 
-            # print("driving2")
+            print("driving2")
             self.drive()
             
             
@@ -167,6 +171,13 @@ class LaneFollowNode(DTROS):
         self.twist1.omega = 0
         self.vel_pub.publish(self.twist1)
         rospy.sleep(tm)
+        
+    def stop_until(self):
+        self.twist1.v = 0
+        self.twist1.omega = 0
+        self.vel_pub.publish(self.twist1)
+        
+        # self.proportional = None
 
     
     def straight(self, id_num):
@@ -177,13 +188,14 @@ class LaneFollowNode(DTROS):
             self.twist1.omega = -0.1
         else:
             self.twist1.omega = -0.09
+            
         rate = rospy.Rate(5)
         for i in range(15):     
             self.vel_pub.publish(self.twist1)
             rate.sleep()
 
-        # self.last_error = 0
-        self.proportional = None
+        self.last_error = 0
+        # self.proportional = None
     
 
     def right(self, id_num):
@@ -195,8 +207,8 @@ class LaneFollowNode(DTROS):
         for i in range(loop):     
             self.vel_pub.publish(self.twist1)
             rate.sleep()
-        # self.last_error = 0
-        self.proportional = None
+        self.last_error = 0
+        # self.proportional = None
         
     def left(self, id_num):
         loop = 8
@@ -208,7 +220,8 @@ class LaneFollowNode(DTROS):
         for i in range(loop):     
             self.vel_pub.publish(self.twist1)
             rate.sleep()
-        self.proportional = None
+        self.last_error = 0
+        # self.proportional = None
 
 
     def drive(self):

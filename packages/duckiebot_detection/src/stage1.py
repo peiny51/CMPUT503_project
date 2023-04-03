@@ -17,6 +17,7 @@ from duckietown_msgs.srv import GetVariable
 
 import rospy
 import time
+import rospkg
 
 from duckietown.dtros import DTROS, NodeType
 from sensor_msgs.msg import CompressedImage, CameraInfo
@@ -70,7 +71,7 @@ class TagDetector(DTROS):
         self.tag_id_lt = [50]
         self.tag_id_rt = [48]
         self.tag_id_stop = [163, 38]
-        self.turning_tags = [48, 50, 56]
+        self.turning_tags = [48, 50, 56, 163]
         
         self.img_queue = deque(maxlen=1)
 
@@ -96,9 +97,9 @@ class TagDetector(DTROS):
     def run(self): 
         rate = rospy.Rate(5) # 5Hz== 10
         while not rospy.is_shutdown():
-            if self.next_intersection == 163:
-                self.id_pub.publish(9999)
-                rospy.signal_shutdown("Done")
+            # if self.next_intersection == 1234:
+            #     self.id_pub.publish(9999)
+            #     rospy.signal_shutdown("Done")
             if self.img_queue:
                 img = self.img_queue.popleft()  
                 self.process_img(img)
@@ -109,28 +110,30 @@ class TagDetector(DTROS):
         pass
     
     def process_img(self, img):
+        min_dist = -1
         target_size = self.detect_intersection(img)
-        
-        # stage 2
-        # saw the crossroad
-        # if self.next_intersection == 163:
-        #     self.id_pub.publish(STOP_UNTIL)
-        #     if self.detect_ducks(img):
-        #         self.self.id_pub.publish(STOP_UNTIL)
-        #     else:
-        #         # move straight
-        #         self.self.id_pub.publish(56)
+        target_size2 = self.detect_crossroad(img)
+        rospy.loginfo(f'target size1: {target_size2}')
             
         if target_size > 0.2 and self.next_intersection != -1:
             # rospy.loginfo(f'At intersection, target size: {target_size}')
             self.id_pub.publish(self.next_intersection)
             self.next_intersection = -1
+        elif target_size2 > 0.2 and self.next_intersection == 163:
+            rospy.loginfo('stops')
+            self.id_pub.publish(STOP_UNTIL)
+            rospy.loginfo('stops2')
+            if self.detect_ducks(img, min_dist) == False:
+                rospy.loginfo('begin publish 1')
+                self.id_pub.publish(1)  # driving
+                rospy.loginfo('after publish 1')
+                self.next_intersection = -1
             
         else:
             undistorted_img = self.undistort_img(img)
             tags = self.detector.detect(undistorted_img, True, self._camera_parameters, self.tag_size)                
 
-            min_dist = -1
+            
             min_tag_id = -1 
             min_tag = None
             
@@ -150,25 +153,48 @@ class TagDetector(DTROS):
 
             if min_tag_id != -1: # We next_interhave the tag with minimum distance
                 
-                # if min_dist < self.dist_threshold:
-                #     self.id_pub.publish(min_tag_id)
-                
-                
                 if self.next_intersection == -1 and min_tag_id in self.turning_tags:
                     self.next_intersection = min_tag_id
                     # rospy.loginfo(f'Intersection set to: {min_tag_id}')
                         
+                # stage 2
+                # saw the crossroad
+                # target_size2 = self.detect_crossroad(img)
+                # rospy.loginfo(f'target size2: {target_size2}')
+                
 
-    def detect_ducks(self):
-        img = self.jpeg.decode(msg.data)
-        crop = img[300:-1, :, :]
-        crop_width = crop.shape[1]
-        hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
-        mask = cv2.inRange(hsv, ROAD_MASK[0], ROAD_MASK[1])
-        crop = cv2.bitwise_and(crop, crop, mask=mask)
-        contours, hierarchy = cv2.findContours(mask,
-                                               cv2.RETR_EXTERNAL,
-                                               cv2.CHAIN_APPROX_NONE)
+
+    def detect_ducks(self, img, dist):
+        rospack = rospkg.RosPack()
+        path = rospack.get_path("duckiebot_detection") 
+        img_path = str(path)+"/src/close_crop.png"
+        template = cv2.imread(img_path)
+        
+        detect = False
+        DEBUG = True
+        
+        # h, w, d = img.shape
+        
+        # x1 = int((0.25 + (1-dist)/8)*h)
+        # x2 = int((1-dist)*h)
+        # cropped_img = img[x1:x2, 0:int(0.65*w),:]
+        
+
+        res = cv2.matchTemplate(img, template, cv2.TM_CCOEFF_NORMED)
+        threshold = .8
+        loc = np.where(res >= threshold)
+
+        if len(loc[0]) != 0:
+            detect = True
+        else:
+            detect =  False
+        
+        # if DEBUG:
+        #     rect_img_msg = self.bridge.cv2_to_compressed_imgmsg(cropped_img)
+        #     self.image_pub.publish(rect_img_msg)
+        
+        rospy.loginfo(f"detect: {detect}")
+        return False
         
     def detect_intersection(self, img):
         crop = img[360:-1, :, :]
@@ -185,6 +211,18 @@ class TagDetector(DTROS):
         # join my masks
         mask = mask0+mask1
         target_size = np.sum(mask/255.) / mask.size
+        return target_size
+    
+    
+    def detect_crossroad(self, img):
+        crop = img[360:-1, :, :]
+        hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+        lower_blue = np.array([80,50,0])
+        upper_blue = np.array([130,255, 255])
+        mask = cv2.inRange(hsv, lower_blue, upper_blue)
+
+        target_size = np.sum(mask/255.) / mask.size
+        
         return target_size
 
 

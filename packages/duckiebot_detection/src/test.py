@@ -34,6 +34,7 @@ class TestNode(DTROS):
         self.rectify_alpha = rospy.get_param("~rectify_alpha", 0.0)
 
         self.bridge = CvBridge() 
+        self.jpeg = TurboJPEG()
         
         self._map_xy_set = False
         
@@ -63,15 +64,7 @@ class TestNode(DTROS):
         
 
         self.dist_threshold = 10
-        
-        # # Publisher
-        # self.pub_view = rospy.Publisher(
-        #     f'/{name}/test/image/compressed',
-        #     CompressedImage,
-        #     queue_size=1
-        # )
-        
-        self.counter = 1
+        self.counter = 0
         self.digit = -1
     
         self.tag_info = {
@@ -103,90 +96,75 @@ class TestNode(DTROS):
                 img = self.img_queue.popleft()  
                 self.detect_tag(img)
             rate.sleep()
-
-    def draw_detect_results(self, img, tag, dist):
+                
+        
+    def detect_ducks(self, img, dist):
         # Enumerate through the detection results
-        (ptA, ptB, ptC, ptD) = tag.corners
-
-        ptA = (int(ptA[0]), int(ptA[1]))
-        ptB = (int(ptB[0]), int(ptB[1]))
-        ptC = (int(ptC[0]), int(ptC[1]))
-        ptD = (int(ptD[0]), int(ptD[1]))
+        detect = False
+        DEBUG = True
+        h, w, d = img.shape
         
+        x1 = int((0.25 + (1-dist)/8)*h)
+        x2 = int((1-dist)*h)
+        cropped_img = img[x1:x2, 0:int(0.65*w),:]
         
-        # cropped_img
-        tag_width = ptB[0] - ptA[0]
-        top_dist = int(tag_width * 1.5)
-        x1 = int(ptD[1]-top_dist)
-        if x1 < 0:
-            x1 = 0
-            
-        x2 = ptD[1]
-        if x2 >= 480:
-            x2 = 479
-        
-        x3 = ptA[0] - 10
-        if x3 < 0:
-            x3 = 0
-            
-        x4 = ptB[0] + 10
-        if x4 >= 640:
-            x4 = 639
-        
-        cropped_img = img[x1:x2, x3:x4]
-        h, w = cropped_img.shape
-        # rospy.loginfo(f'width: {w} height: {h}')
-        if h == 0:
-            return None
-        
-    
         # collect images for training
-        filename = '/data/bags/nn'+ str(self.counter)+".jpg"
-        cv2.imwrite(filename, cropped_img)
-        self.counter = self.counter + 1
+        # filename = '/data/bags/n'+ str(self.counter)+".jpg"
+        # cv2.imwrite(filename, cropped_img)
+        # self.counter = self.counter + 1
+        
+        
+        # # ROAD_MASK = [(20, 60, 0), (50, 255, 255)]
+        # ORANGE_MIN = np.array([30, 30, 40],np.uint8)
+        # ORANGE_MAX = np.array([44, 90, 80],np.uint8)
+        # hsv = cv2.cvtColor(cropped_img, cv2.COLOR_BGR2HSV)
+        # mask = cv2.inRange(hsv, ORANGE_MIN, ORANGE_MAX)
+        # mask = cv2.erode(mask, None, iterations=2)  #Erode and diminish the small masks (hot pixels) in the image (eliminate small color blocks or hot pixels)  
+        # mask = cv2.dilate(mask, None, iterations=2)
+        # cropped_img = cv2.bitwise_and(cropped_img, cropped_img, mask=mask)
+        # contours, hierarchy = cv2.findContours(mask,
+        #                                        cv2.RETR_EXTERNAL,
+        #                                        cv2.CHAIN_APPROX_NONE)
 
-        # A = (x3, x2)
-        # B = (x4, x2)
-        # C = (x4, x1)
-        # D = (x3, x1)
-        
-        # # Draw the bbox
-        # col = (0, 0, 255)
-        # cv2.line(cropped_img, A, B, col, 2)
-        # cv2.line(cropped_img, B, C, col, 2)
-        # cv2.line(cropped_img, C, D, col, 2)
-        # cv2.line(cropped_img, D, A, col, 2)
-        
-        
-        # Determine the decoded ID of tag, and decide the color of bbox 
-        # id = tag.tag_id
+        # # Search for lane in front
+        # max_area = 20
+        # max_idx = -1
+        # for i in range(len(contours)):
+        #     area = cv2.contourArea(contours[i])
+        #     if area > max_area:
+        #         max_idx = i
+        #         max_area = area
 
-        # tag_name = "Stop sign"
-        # which_tag = 's'
-        # col = (0, 0, 255)   # stop sign (default)
-        # if id in [153, 58, 133, 62]:
-        #     tag_name = "T-intersection"
-        #     col = (255, 0, 0)   # T-intersection sign
-        # elif id in [201, 93, 94, 200]:
-        #     tag_name = "UofA"
-        #     col = (0, 255, 0)   # UofA sign
+        # if max_idx != -1:
+        #     M = cv2.moments(contours[max_idx])
+        #     try:
+        #         cx = int(M['m10'] / M['m00'])
+        #         cy = int(M['m01'] / M['m00'])
+        #         # self.proportional = cx - int(crop_width / 2) + self.offset
+        #         detect = True
+        #         if DEBUG:
+        #             cv2.drawContours(cropped_img, contours, max_idx, (0, 255, 0), 3)
+        #             cv2.circle(cropped_img, (cx, cy), 7, (0, 0, 255), -1)
+        #     except: 
+        #         pass
         
-        # # Draw the center dot and name of tag
-        # cx, cy = int(tag.center[0]), int(tag.center[1])
-        # cv2.circle(img, (cx, cy), 5, (0, 0, 255), -1)
-        # cv2.putText(img, tag_name, (cx, cy + 15),
-        #             cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-        #             (0, 0, 255), 2)
-
-        return cropped_img
+        # # h, w, d = cropped_img.shape
+        
+        if DEBUG:
+            rect_img_msg = self.bridge.cv2_to_compressed_imgmsg(cropped_img)
+            self.image_pub.publish(rect_img_msg)
+            
+            
+        # rospy.loginfo(f'width: {w} height: {h}')
+        # if h == 0:
+        #     return None
+        
+        return detect
     
     
     def detect_tag(self, img):
         undistorted_img = self.undistort_img(img)
         tags = self.detector.detect(undistorted_img, True, self._camera_parameters, self.tag_size)
-        
-        # img_remap = cv2.remap(img, self._mapx, self._mapy, cv2.INTER_NEAREST)
-        # rospy.loginfo(f'shape: {img_remap.shape}')
 
         min_dist = -1
         min_tag_id = -1 
@@ -216,20 +194,25 @@ class TestNode(DTROS):
             # rospy.loginfo(f'dist: {min_dist}')
             
             if undistorted_img is not None:
-                image = self.bridge.cv2_to_compressed_imgmsg(undistorted_img)
-                drawed_image = self.draw_detect_results(undistorted_img, min_tag, min_dist)
-                if drawed_image is not None:
-                    drawed_image = self.bridge.cv2_to_compressed_imgmsg(drawed_image)
-                    # self.pub_view.publish(drawed_image)
-                    self.image_pub.publish(drawed_image)   # send image data to digit detector
+                detect = self.detect_ducks(img, min_dist)
+                rospy.loginfo(f'_*_*_*_*_*_*_*_*_*_*_*_*_')
+                rospy.loginfo(f'Ducks detected: {detect}')
+                rospy.loginfo(f'_*_*_*_*_*_*_*_*_*_*_*_*_')
+               
                     
-                    rospy.loginfo(f'_*_*_*_*_*_*_*_*_*_*_*_*_')
-                    rospy.loginfo(f'_*_*_*_*_*_*_*_*_*_*_*_*_')
-                    rospy.loginfo(f'Tag ID: {min_tag_id}')
-                    rospy.loginfo(f'Tag location: {self.tag_info[min_tag_id]}')
-                    rospy.loginfo(f'Detected digit: {self.digit}')
-                    rospy.loginfo(f'_*_*_*_*_*_*_*_*_*_*_*_*_')
-                    rospy.loginfo(f'_*_*_*_*_*_*_*_*_*_*_*_*_')
+                # if drawed_image is not None:
+                #     # detect = False
+                #     detect = self.bridge.cv2_to_compressed_imgmsg(drawed_image)
+                #     # self.image_pub.publish(cropped_img)
+                #     # self.image_pub.publish(drawed_image)   # send image data to digit detector
+                    
+                #     rospy.loginfo(f'_*_*_*_*_*_*_*_*_*_*_*_*_')
+                #     rospy.loginfo(f'_*_*_*_*_*_*_*_*_*_*_*_*_')
+                #     rospy.loginfo(f'Ducks detected: {detect}')
+                #     # rospy.loginfo(f'Tag location: {self.tag_info[min_tag_id]}')
+                #     # rospy.loginfo(f'Detected digit: {self.digit}')
+                #     rospy.loginfo(f'_*_*_*_*_*_*_*_*_*_*_*_*_')
+                #     rospy.loginfo(f'_*_*_*_*_*_*_*_*_*_*_*_*_')
 
 
     def handle_state(req):

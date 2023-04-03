@@ -139,7 +139,7 @@ class LaneFollowNode(DTROS):
             self.velocity = 0.26
         if self.id_num == 2000:
             print("stopping before ducks")
-            # self.stop(3)
+            self.stop(2)
             self.stop_until()
             self.velocity = 0.0
         elif self.id_num == 56:
@@ -158,7 +158,8 @@ class LaneFollowNode(DTROS):
             self.id_num = 0
         elif self.id_num == 1:
             print("go stright")               
-            self.straight(self.id_num)
+            self.straight2(self.id_num)
+            self.velocity = 0.26
             self.id_num = 0
 
         else: 
@@ -197,6 +198,22 @@ class LaneFollowNode(DTROS):
         self.last_error = 0
         # self.proportional = None
     
+    def straight2(self, id_num):
+        # print("straight") 
+        self.twist1.v = 0.3
+        self.twist1.omega = 0
+        if id_num == 56:
+            self.twist1.omega = -0.1
+        else:
+            self.twist1.omega = -0.09
+        
+        
+        rate = rospy.Rate(5)
+        for i in range(10):     
+            self.vel_pub.publish(self.twist1)
+            rate.sleep()
+
+
 
     def right(self, id_num):
         loop = 8

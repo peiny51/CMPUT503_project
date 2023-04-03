@@ -194,7 +194,7 @@ class TagDetector(DTROS):
         #     self.image_pub.publish(rect_img_msg)
         
         rospy.loginfo(f"detect: {detect}")
-        return False
+        return True
         
     def detect_intersection(self, img):
         crop = img[360:-1, :, :]

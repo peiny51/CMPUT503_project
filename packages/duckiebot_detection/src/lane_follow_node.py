@@ -139,7 +139,6 @@ class LaneFollowNode(DTROS):
             self.velocity = 0.26
         if self.id_num == 2000:
             print("stopping before ducks")
-            self.stop(2)
             self.stop_until()
             self.velocity = 0.0
         elif self.id_num == 56:
@@ -157,6 +156,7 @@ class LaneFollowNode(DTROS):
             self.left(self.id_num)
             self.id_num = 0
         elif self.id_num == 1:
+            self.stop(2)
             print("go stright")               
             self.straight2(self.id_num)
             self.velocity = 0.26
@@ -178,7 +178,7 @@ class LaneFollowNode(DTROS):
         self.twist1.omega = 0
         self.vel_pub.publish(self.twist1)
         
-        # self.proportional = None
+        self.proportional = None
 
     
     def straight(self, id_num):

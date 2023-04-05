@@ -94,125 +94,55 @@ class TestNode(DTROS):
         while not rospy.is_shutdown():
             if self.img_queue:
                 img = self.img_queue.popleft()  
-                self.detect_tag(img)
+                self.detect_duck(img)
             rate.sleep()
                 
         
-    def detect_ducks(self, img, dist):
+    def detect_ducks(self, img):
         # Enumerate through the detection results
-        detect = False
-        DEBUG = True
         h, w, d = img.shape
+        crop = img[360:-1, 0:int(0.65*w), :]
+        hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+        # lower_blue = np.array([80,50,0])
+        # upper_blue = np.array([130,255, 255])
+        # mask0 = cv2.inRange(hsv, lower_blue, upper_blue)
         
-        x1 = int((0.25 + (1-dist)/8)*h)
-        x2 = int((1-dist)*h)
-        cropped_img = img[x1:x2, 0:int(0.65*w),:]
-        
-        # collect images for training
-        # filename = '/data/bags/n'+ str(self.counter)+".jpg"
-        # cv2.imwrite(filename, cropped_img)
-        # self.counter = self.counter + 1
-        
-        
-        # # ROAD_MASK = [(20, 60, 0), (50, 255, 255)]
-        # ORANGE_MIN = np.array([30, 30, 40],np.uint8)
-        # ORANGE_MAX = np.array([44, 90, 80],np.uint8)
-        # hsv = cv2.cvtColor(cropped_img, cv2.COLOR_BGR2HSV)
-        # mask = cv2.inRange(hsv, ORANGE_MIN, ORANGE_MAX)
-        # mask = cv2.erode(mask, None, iterations=2)  #Erode and diminish the small masks (hot pixels) in the image (eliminate small color blocks or hot pixels)  
-        # mask = cv2.dilate(mask, None, iterations=2)
-        # cropped_img = cv2.bitwise_and(cropped_img, cropped_img, mask=mask)
-        # contours, hierarchy = cv2.findContours(mask,
-        #                                        cv2.RETR_EXTERNAL,
-        #                                        cv2.CHAIN_APPROX_NONE)
+        lower_orange = np.array([0,0,0])
+        upper_orange = np.array([50,255, 255])
+        mask1 = cv2.inRange(hsv, lower_orange, upper_orange)
 
-        # # Search for lane in front
-        # max_area = 20
-        # max_idx = -1
-        # for i in range(len(contours)):
-        #     area = cv2.contourArea(contours[i])
-        #     if area > max_area:
-        #         max_idx = i
-        #         max_area = area
-
-        # if max_idx != -1:
-        #     M = cv2.moments(contours[max_idx])
-        #     try:
-        #         cx = int(M['m10'] / M['m00'])
-        #         cy = int(M['m01'] / M['m00'])
-        #         # self.proportional = cx - int(crop_width / 2) + self.offset
-        #         detect = True
-        #         if DEBUG:
-        #             cv2.drawContours(cropped_img, contours, max_idx, (0, 255, 0), 3)
-        #             cv2.circle(cropped_img, (cx, cy), 7, (0, 0, 255), -1)
-        #     except: 
-        #         pass
+        # mask = mask0 + mask1
+        target_size = np.sum(mask1/255.) / mask1.size
         
-        # # h, w, d = cropped_img.shape
         
-        if DEBUG:
-            rect_img_msg = self.bridge.cv2_to_compressed_imgmsg(cropped_img)
-            self.image_pub.publish(rect_img_msg)
+        
+        # mask_or = cv2.bitwise_or(mask0, mask1)
+        # target_size1 = np.sum(mask_or/255.) / mask_or.size
+        
+        # mask_and = cv2.bitwise_and(mask0, mask1)
+        # target_size2 = np.sum(mask_and/255.) / mask_and.size
+        # target = cv2.bitwise_and(crop, crop, mask = mask)
+        
+        # rospy.loginfo(f'1: {target_size1} 2:{target_size2}')
+        
+        # if DEBUG:
+        #     rect_img_msg = self.bridge.cv2_to_compressed_imgmsg(cropped_img)
+        #     self.image_pub.publish(rect_img_msg)
             
             
         # rospy.loginfo(f'width: {w} height: {h}')
         # if h == 0:
         #     return None
         
-        return detect
+        return target_size
     
-    
-    def detect_tag(self, img):
-        undistorted_img = self.undistort_img(img)
-        tags = self.detector.detect(undistorted_img, True, self._camera_parameters, self.tag_size)
-
-        min_dist = -1
-        min_tag_id = -1 
-        min_tag = None
-        
-        for tag in tags:
-            p = tag.pose_t.T[0]
-            tag_id=int(tag.tag_id)
-            dist = math.sqrt(p[0]**2 + p[1]**2 + p[2]**2)
-
-            if dist > self.dist_threshold:
-                continue
-
-            if min_dist == -1:
-                min_dist = dist
-                min_tag_id = tag_id 
-                min_tag = tag
-            elif dist < min_dist:
-                min_dist = dist
-                min_tag_id = tag_id 
-                min_tag = tag
-
-        if min_tag_id != -1: # We have the tag with minimum distance
-            # gray_img = cv2.cvtColor(undistorted_img, cv2.COLOR_BGR2GRAY)
-            
-            # rospy.loginfo(f'Tag : {min_tag}')
-            # rospy.loginfo(f'dist: {min_dist}')
-            
-            if undistorted_img is not None:
-                detect = self.detect_ducks(img, min_dist)
-                rospy.loginfo(f'_*_*_*_*_*_*_*_*_*_*_*_*_')
-                rospy.loginfo(f'Ducks detected: {detect}')
-                rospy.loginfo(f'_*_*_*_*_*_*_*_*_*_*_*_*_')
-               
-                    
-                # if drawed_image is not None:
-                #     # detect = False
-                #     detect = self.bridge.cv2_to_compressed_imgmsg(drawed_image)
-                #     # self.image_pub.publish(cropped_img)
-                #     # self.image_pub.publish(drawed_image)   # send image data to digit detector
-                    
-                #     rospy.loginfo(f'_*_*_*_*_*_*_*_*_*_*_*_*_')
-                #     rospy.loginfo(f'_*_*_*_*_*_*_*_*_*_*_*_*_')
-                #     rospy.loginfo(f'Ducks detected: {detect}')
-                #     # rospy.loginfo(f'Tag location: {self.tag_info[min_tag_id]}')
-                #     # rospy.loginfo(f'Detected digit: {self.digit}')
-                #     rospy.loginfo(f'_*_*_*_*_*_*_*_*_*_*_*_*_')
-                #     rospy.loginfo(f'_*_*_*_*_*_*_*_*_*_*_*_*_')
+    def detect_duck(self, img):
+       
+        # undistorted_img = self.undistort_img(img)
+        detect = self.detect_ducks(img)
+        rospy.loginfo(f'_*_*_*_*_*_*_*_*_*_*_*_*_')
+        rospy.loginfo(f'Ducks detected: {detect}')
+        rospy.loginfo(f'_*_*_*_*_*_*_*_*_*_*_*_*_')
 
 
     def handle_state(req):

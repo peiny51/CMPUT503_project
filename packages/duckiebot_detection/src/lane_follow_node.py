@@ -91,7 +91,6 @@ class LaneFollowNode(DTROS):
 
         # Shutdown hook
         rospy.on_shutdown(self.hook)
-        availalbe
     
     def cb_detection(self, bool_stamped):
         """

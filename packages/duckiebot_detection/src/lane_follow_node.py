@@ -73,14 +73,14 @@ class LaneFollowNode(DTROS):
             self.offset = -240
         else:
             self.offset = 240
-        self.velocity = 0.26
+        self.velocity = 0.23
         self.twist = Twist2DStamped(v=self.velocity, omega=0)
         self.twist1 = Twist2DStamped(v=0, omega=0)
         self.P = 0.04
         self.D = -0.004
         self.I = 0.008
         self.last_error = 0
-        self.safe_dist = 40
+        self.safe_dist = 43
         self.last_time = rospy.get_time()
         self.l = rospy.get_time()
         self.check = False
@@ -177,13 +177,13 @@ class LaneFollowNode(DTROS):
             print("stopping")
             self.stop(3)
             self.id_num = 0
-            self.velocity = 0.26
+            self.velocity = 0.23
             self.offset = -200
         if self.id_num == 1000:
             print("stopping")
             self.stop(3)
             self.id_num = 0
-            self.velocity = 0.26
+            self.velocity = 0.23
         if self.id_num == 2000:
             print("stopping before ducks")
             self.stop_until()
@@ -206,7 +206,7 @@ class LaneFollowNode(DTROS):
             self.stop(2)
             print("go stright")               
             self.straight2(self.id_num)
-            self.velocity = 0.26
+            self.velocity = 0.23
             self.id_num = 0
 
         else: 

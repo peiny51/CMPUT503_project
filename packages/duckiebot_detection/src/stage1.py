@@ -12,7 +12,7 @@ from turbojpeg import TurboJPEG
 from collections import deque
 from turbojpeg import TurboJPEG, TJPF_GRAY
 from dt_apriltags import Detector
-from duckietown_msgs.msg import AprilTagDetectionArray, AprilTagDetection, Twist2DStamped
+from duckietown_msgs.msg import AprilTagDetectionArray, AprilTagDetection, Twist2DStamped, BoolStamped
 from duckietown_msgs.srv import GetVariable
 
 import rospy
@@ -43,14 +43,11 @@ class TagDetector(DTROS):
     def __init__(self, node_name):
         super(TagDetector, self).__init__(node_name=node_name, node_type=NodeType.GENERIC)
         name = os.environ['VEHICLE_NAME']
-        self.host = str(os.environ['VEHICLE_NAME'])
-        
         self.image_sub = rospy.Subscriber(f'/{name}/camera_node/image/compressed', CompressedImage, self.rcv_img,  queue_size = 1)  
         self.image_pub = rospy.Publisher(f'/{name}/digit_detector_node/image/compressed', CompressedImage,  queue_size = 1) 
         self.id_pub = rospy.Publisher("/" + name + "/april_tag_id", Int32, queue_size=1)
-        # self.sub_x = rospy.Subscriber("/{}/duckiebot_detection_node/x".format(self.host), Float32, self.cb_x, queue_size=1)
-        # self.sub_detection = rospy.Subscriber("/{}/duckiebot_detection_node/detection".format(self.host), BoolStamped, self.cb_detection, queue_size=1)
-        # self.sub_distance_to_robot_ahead = rospy.Subscriber("/{}/duckiebot_distance_node/distance".format(self.host), Float32, self.cb_distance, queue_size=1)
+        
+        
         self.img_queue = deque(maxlen=1)
         self.rectify_alpha = rospy.get_param("~rectify_alpha", 0.0)
         self.jpeg = TurboJPEG()
@@ -71,8 +68,8 @@ class TagDetector(DTROS):
         # self.tag_id_uofa = [93, 94, 200, 201]  # very outer 
         self.tag_id_lt = [50]
         self.tag_id_rt = [48]
-        self.tag_id_stop = [163, 38]
-        self.turning_tags = [48, 50, 56, 163]
+        self.tag_id_stop = [163, 38, 21]   # 21 is in grad room
+        self.turning_tags = [48, 50, 56, 163, 21]
         
         self.img_queue = deque(maxlen=1)
 
@@ -94,9 +91,11 @@ class TagDetector(DTROS):
         self.d = 0
         
         
+        
     def rcv_img(self, msg):
         image = self.jpeg.decode(msg.data)
         self.img_queue.append(image)
+        
     
     def run(self): 
         rate = rospy.Rate(5) # 5Hz== 10
@@ -110,12 +109,7 @@ class TagDetector(DTROS):
             rate.sleep()
     
     
-    def detect_bot(self):
-        pass
-    
     def process_img(self, img):
-        
-        
         rospy.loginfo(f'd: {self.d}')
         min_dist = -1
         target_size = self.detect_intersection(img)
@@ -135,7 +129,7 @@ class TagDetector(DTROS):
                 # rospy.loginfo(f'At intersection, target size: {target_size}')
                 self.id_pub.publish(self.next_intersection)
                 self.next_intersection = -1
-            elif blue_ahead > 0.15 and self.next_intersection == 163:
+            elif blue_ahead > 0.2 and self.next_intersection == 21:  # 0.15
                 rospy.loginfo('stops')
                 self.id_pub.publish(STOP_UNTIL)
                 rospy.loginfo('stops2')

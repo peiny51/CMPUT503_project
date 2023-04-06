@@ -9,7 +9,7 @@ from turbojpeg import TurboJPEG
 import cv2
 import time
 import numpy as np
-from duckietown_msgs.msg import WheelsCmdStamped, Twist2DStamped
+from duckietown_msgs.msg import WheelsCmdStamped, Twist2DStamped, BoolStamped
 
 ROAD_MASK = [(20, 60, 0), (50, 255, 255)]
 DEBUG = False
@@ -39,6 +39,7 @@ class LaneFollowNode(DTROS):
         super(LaneFollowNode, self).__init__(node_name=node_name, node_type=NodeType.GENERIC)
         self.node_name = node_name
         name = os.environ['VEHICLE_NAME']
+        self.host = str(os.environ['VEHICLE_NAME'])
 
         # Publishers & Subscribers
         self.pub = rospy.Publisher("/" + name + "/output/image/mask/compressed",
@@ -58,7 +59,8 @@ class LaneFollowNode(DTROS):
                                     self.callback_at,
                                     queue_size=1)
         
-               
+        self.sub_detection = rospy.Subscriber("/{}/duckiebot_detection_node/detection".format(self.host), BoolStamped, self.cb_detection, queue_size=1)
+        self.sub_distance_to_robot_ahead = rospy.Subscriber("/{}/duckiebot_distance_node/distance".format(self.host), Float32, self.cb_distance, queue_size=1)
         
 
         self.jpeg = TurboJPEG()
@@ -78,13 +80,39 @@ class LaneFollowNode(DTROS):
         self.D = -0.004
         self.I = 0.008
         self.last_error = 0
+        self.safe_dist = 40
         self.last_time = rospy.get_time()
+        self.l = rospy.get_time()
+        self.check = False
+        self.first = True
 
         # Wait a little while before sending motor commands
         rospy.Rate(0.20).sleep()
 
         # Shutdown hook
         rospy.on_shutdown(self.hook)
+        availalbe
+    
+    def cb_detection(self, bool_stamped):
+        """
+        call back function for leader detection
+        """
+        self.detection = bool_stamped.data 
+            
+    def cb_distance(self, distance):
+        """
+        call back function for leader distance
+        """
+        self.distance = 100 * (distance.data)
+        rospy.loginfo(f'Distance from the robot in front: {self.distance}')
+        
+        if self.distance < self.safe_dist and self.first == True:
+            self.first = False
+            rospy.loginfo('Eng')
+            self.id_num = 500
+            # self.stop(3)
+            # self.id_num = 0
+            # self.offset = -200
 
     def callback(self, msg):
         img = self.jpeg.decode(msg.data)
@@ -111,6 +139,20 @@ class LaneFollowNode(DTROS):
             try:
                 cx = int(M['m10'] / M['m00'])
                 cy = int(M['m01'] / M['m00'])
+                
+                if self.offset == -200 and self.id_num == 0:
+                    rospy.loginfo("hehe")
+                    if self.check == False:
+                        self.l = rospy.get_time()
+                    duration = (rospy.get_time() - self.l)
+                
+                    if duration > 3.5:
+                        self.offset = 240
+                        rospy.loginfo("2 seconds")
+                        self.check = False
+                        self.first = True
+                    self.check = True
+                    rospy.loginfo("hehe2")
                 self.proportional = cx - int(crop_width / 2) + self.offset
                 if DEBUG:
                     cv2.drawContours(crop, contours, max_idx, (0, 255, 0), 3)
@@ -132,6 +174,12 @@ class LaneFollowNode(DTROS):
         # rospy.loginfo(f'## Tag ID detected in controller: {self.id_num}')
         if self.id_num == 9999:
             rospy.signal_shutdown("Done!")
+        if self.id_num == 500:
+            print("stopping")
+            self.stop(3)
+            self.id_num = 0
+            self.velocity = 0.26
+            self.offset = -200
         if self.id_num == 1000:
             print("stopping")
             self.stop(3)

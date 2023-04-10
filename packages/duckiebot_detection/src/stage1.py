@@ -24,6 +24,8 @@ from sensor_msgs.msg import CompressedImage, CameraInfo
 from geometry_msgs.msg import Transform, Vector3, Quaternion
 from std_msgs.msg import String, Float32, Int32
 
+from math import pi
+
 LEFT = 50
 RIGHT = 48
 STOP = 1000 
@@ -48,6 +50,9 @@ class TagDetector(DTROS):
         self.id_pub = rospy.Publisher("/" + name + "/april_tag_id", Int32, queue_size=1)
         
         
+        
+        
+        
         self.img_queue = deque(maxlen=1)
         self.rectify_alpha = rospy.get_param("~rectify_alpha", 0.0)
         self.jpeg = TurboJPEG()
@@ -64,6 +69,8 @@ class TagDetector(DTROS):
         self.refine_edges = rospy.get_param("~refine_edges", 1)
         self.decode_sharpening = rospy.get_param("~decode_sharpening", 0.25)
         self.tag_size = rospy.get_param("~tag_size", 0.065)
+        
+        
 
         # self.tag_id_uofa = [93, 94, 200, 201]  # very outer 
         self.tag_id_lt = [50]
@@ -89,6 +96,7 @@ class TagDetector(DTROS):
         self.counter = 0
         self.b = 0
         self.d = 0
+        
         
         
         
@@ -129,7 +137,7 @@ class TagDetector(DTROS):
                 # rospy.loginfo(f'At intersection, target size: {target_size}')
                 self.id_pub.publish(self.next_intersection)
                 self.next_intersection = -1
-            elif blue_ahead > 0.2 and self.next_intersection == 21:  # 0.15
+            elif blue_ahead > 0.2 and self.next_intersection == 163:  # 0.15
                 rospy.loginfo('stops')
                 self.id_pub.publish(STOP_UNTIL)
                 rospy.loginfo('stops2')

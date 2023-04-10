@@ -9,7 +9,8 @@ from turbojpeg import TurboJPEG
 import cv2
 import time
 import numpy as np
-from duckietown_msgs.msg import WheelsCmdStamped, Twist2DStamped, BoolStamped
+from duckietown_msgs.msg import WheelsCmdStamped, Twist2DStamped, BoolStamped, WheelEncoderStamped
+from math import pi
 
 ROAD_MASK = [(20, 60, 0), (50, 255, 255)]
 DEBUG = False
@@ -40,6 +41,8 @@ class LaneFollowNode(DTROS):
         self.node_name = node_name
         name = os.environ['VEHICLE_NAME']
         self.host = str(os.environ['VEHICLE_NAME'])
+        
+        self.reset()
 
         # Publishers & Subscribers
         self.pub = rospy.Publisher("/" + name + "/output/image/mask/compressed",
@@ -59,9 +62,15 @@ class LaneFollowNode(DTROS):
                                     self.callback_at,
                                     queue_size=1)
         
+        self.right_tick_sub = rospy.Subscriber(f'/{name}/right_wheel_encoder_node/tick', 
+        WheelEncoderStamped, self.right_tick,  queue_size = 1)
+        self.left_tick_sub = rospy.Subscriber(f'/{name}/left_wheel_encoder_node/tick', 
+        WheelEncoderStamped, self.left_tick,  queue_size = 1)
+        
         self.sub_detection = rospy.Subscriber("/{}/duckiebot_detection_node/detection".format(self.host), BoolStamped, self.cb_detection, queue_size=1)
         self.sub_distance_to_robot_ahead = rospy.Subscriber("/{}/duckiebot_distance_node/distance".format(self.host), Float32, self.cb_distance, queue_size=1)
         
+        self.r = rospy.get_param(f'/{name}/kinematics_node/radius', 100)
 
         self.jpeg = TurboJPEG()
         self.id_num = 0 
@@ -80,17 +89,89 @@ class LaneFollowNode(DTROS):
         self.D = -0.004
         self.I = 0.008
         self.last_error = 0
-        self.safe_dist = 43
+        self.safe_dist = 45
         self.last_time = rospy.get_time()
         self.l = rospy.get_time()
         self.check = False
         self.first = True
+        self.bias = 0 # -0.09
 
         # Wait a little while before sending motor commands
         rospy.Rate(0.20).sleep()
 
         # Shutdown hook
         rospy.on_shutdown(self.hook)
+        
+
+    def reset(self):
+        self.rt_initial_set = False
+        self.rt = 0
+        self.rt_initial_val = 0
+
+        self.lt_initial_set = False
+        self.lt = 0
+        self.lt_initial_val = 0
+        
+        self.prv_rt = 0
+        self.prv_lt = 0
+        
+        self.Th = 0
+        self.L = 0.05
+
+
+    def right_tick(self, msg):
+        if not self.rt_initial_set:
+            self.rt_initial_set = True
+            self.rt_initial_val = msg.data
+        self.rt = msg.data - self.rt_initial_val
+        # self.rt_dist = (2 * pi * self.r * self.rt_val) / 135
+
+
+    def left_tick(self, msg):
+        if not self.lt_initial_set:
+            self.lt_initial_set = True
+            self.lt_initial_val = msg.data
+        self.lt = msg.data - self.lt_initial_val
+        # self.lt_dist = (2 * pi * self.r * self.lt_val) / 135
+        
+    def task_rotation(self, rotation_amount, omega_amount, stopping_offset):
+        rospy.loginfo("Starting rotation task..")
+        rospy.loginfo(f'Initial Theta: {self.Th}')
+        msg_velocity = Twist2DStamped()
+        rate = rospy.Rate(50)
+
+        initial_theta = self.Th
+        
+        target_theta = initial_theta + rotation_amount
+        prv_rt = self.rt
+        prv_lt = self.lt
+
+        while True:
+            delta_rt = self.rt - prv_rt 
+            delta_lt = self.lt - prv_lt
+            prv_rt = self.rt
+            prv_lt = self.lt
+        
+            delta_rw_dist = (2 * pi * self.r * delta_rt) / 135
+            delta_lw_dist = (2 * pi * self.r * delta_lt) / 135
+
+            delta_dist_cover = (delta_rw_dist + delta_lw_dist)/2
+
+            self.Th  += (delta_rw_dist - delta_lw_dist) / (2 * self.L)
+        
+            if rotation_amount < 0 and self.Th - stopping_offset < target_theta:
+                break
+            if rotation_amount > 0 and self.Th + stopping_offset > target_theta:
+                break
+ 
+            self.twist1.v = 0
+            self.twist1.omega = omega_amount
+
+            self.vel_pub.publish(self.twist1)
+            rospy.loginfo(f'Self.Th: {self.Th}, target_th: {target_theta}')
+            rate.sleep()
+
+        rospy.loginfo(f'Final Theta: {self.Th}')
     
     def cb_detection(self, bool_stamped):
         """
@@ -139,17 +220,32 @@ class LaneFollowNode(DTROS):
                 cx = int(M['m10'] / M['m00'])
                 cy = int(M['m01'] / M['m00'])
                 
-                if self.offset == -200 and self.id_num == 0:
+                if (self.offset in [-180]) and self.id_num == 0:
                     rospy.loginfo("hehe")
                     if self.check == False:
                         self.l = rospy.get_time()
                     duration = (rospy.get_time() - self.l)
-                
-                    if duration > 3.5:
+                    self.bais = 0
+                    # if duration > 1:  #
+                    #     self.offset = 0
+                    #     rospy.loginfo("2 seconds")
+                    
+                    # if duration > 2:  #
+                    #     self.offset = -180
+                    #     rospy.loginfo("2 seconds")
+                        
+                    if duration > 2:  #
+                        self.stop(0.2)
+                        self.task_rotation(-pi/4, -2.7, 0)
+                        self.straight(501)
+                        self.proportional = None
+                        
                         self.offset = 240
-                        rospy.loginfo("2 seconds")
+                        rospy.loginfo("4 seconds")
                         self.check = False
                         self.first = True
+                        # self.bais = -0.09
+                        self.last_error = 0
                     self.check = True
                     rospy.loginfo("hehe2")
                 self.proportional = cx - int(crop_width / 2) + self.offset
@@ -176,9 +272,12 @@ class LaneFollowNode(DTROS):
         if self.id_num == 500:
             print("stopping")
             self.stop(3)
+            self.task_rotation(pi/4, 3, 0)
+            self.straight(self.id_num)
+            self.proportional = None
             self.id_num = 0
             self.velocity = 0.23
-            self.offset = -200
+            self.offset = -180
         if self.id_num == 1000:
             print("stopping")
             self.stop(3)
@@ -230,20 +329,28 @@ class LaneFollowNode(DTROS):
     
     def straight(self, id_num):
         # print("straight") 
-        self.twist1.v = 0.3
+        self.twist1.v = 0.23
         self.twist1.omega = 0
+        
+        loop = 15
         if id_num == 56:
             self.twist1.omega = -0.1
+        elif id_num == 500:
+            self.twist1.omega = -0.2
+            loop = 4
+        elif id_num == 501:
+            self.twist1.omega = 1.6
+            loop = 5
         else:
             self.twist1.omega = -0.09
             
         rate = rospy.Rate(5)
-        for i in range(15):     
+        for i in range(loop):     
             self.vel_pub.publish(self.twist1)
             rate.sleep()
 
-        self.last_error = 0
-        # self.proportional = None
+        # self.last_error = 0
+        self.proportional = None
     
     def straight2(self, id_num):
         # print("straight") 
@@ -267,12 +374,16 @@ class LaneFollowNode(DTROS):
         if id_num == 48:
             self.twist1.v = 0.2
             self.twist1.omega = -1
+        if id_num == 500:
+            self.twist1.v = 0.05
+            self.twist1.omega = -2.6
+            loop = 7
         rate = rospy.Rate(5)
         for i in range(loop):     
             self.vel_pub.publish(self.twist1)
             rate.sleep()
-        self.last_error = 0
-        # self.proportional = None
+        # self.last_error = 0
+        self.proportional = None
         
     def left(self, id_num):
         loop = 8
@@ -280,12 +391,16 @@ class LaneFollowNode(DTROS):
             self.twist1.v = 0.2
             self.twist1.omega = 1
             loop = 15
+        if id_num == 500:
+            self.twist1.v = 0.05
+            self.twist1.omega = 2.7
+            loop = 7
         rate = rospy.Rate(5)
         for i in range(loop):     
             self.vel_pub.publish(self.twist1)
             rate.sleep()
-        self.last_error = 0
-        # self.proportional = None
+        # self.last_error = 0
+        self.proportional = None
 
 
     def drive(self):
@@ -307,7 +422,7 @@ class LaneFollowNode(DTROS):
             I = -self.proportional * self.I * d_time
 
             self.twist.v = self.velocity
-            self.twist.omega = P + I + D
+            self.twist.omega = P + I + D + self.bias
             if DEBUG:
                 self.loginfo(self.proportional, P, D, self.twist.omega, self.twist.v)
 

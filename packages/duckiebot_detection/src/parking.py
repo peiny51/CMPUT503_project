@@ -23,6 +23,8 @@ from sensor_msgs.msg import CompressedImage, CameraInfo
 from geometry_msgs.msg import Transform, Vector3, Quaternion
 from std_msgs.msg import String, Float32, Int32
 
+from math import pi
+
 
 class ParkingNode(DTROS):
     def __init__(self, node_name):
@@ -48,6 +50,8 @@ class ParkingNode(DTROS):
         self._map_xy_set = False
         self.bridge = CvBridge() 
         
+        self.r = rospy.get_param(f'/{name}/kinematics_node/radius', 100)
+        
         yaml_path = f'/data/config/calibrations/camera_intrinsic/{name}.yaml'
         self.init_undistor_img(yaml_path)
 
@@ -70,13 +74,14 @@ class ParkingNode(DTROS):
             decode_sharpening=self.decode_sharpening,) 
         
 
-        self.parking_spot = 4
+        self.parking_spot = 2
         self.state = "STRAIGHT"
         self.turns = ["D", "Turn1", "Turn2", "Turn3", "Turn4"]
         self.turn_ids = [0, 207, 226, 228, 75]
         self.turn_omega = [0, 3, 3, -2.7, -2.6]
-
-        self.center_bias = [15, 30, 0, -35, -20]
+        self.center_bias = [15, 30, 0, -15, -20]
+        self.time_detect = [0.5, 0.5, 0.5, 0.47, 0.47]
+        self.time_not_detect = [0.5, 0.45, 0.45, 0.35, 0.35]
 
         # PID Variables
         self.proportional = None
@@ -98,6 +103,11 @@ class ParkingNode(DTROS):
         self.lt_initial_set = False
         self.lt = 0
         self.lt_initial_val = 0
+        
+        self.prv_rt = 0
+        self.prv_lt = 0
+        
+        self.vel_incr = 0
 
 
     def right_tick(self, msg):
@@ -105,7 +115,6 @@ class ParkingNode(DTROS):
             self.rt_initial_set = True
             self.rt_initial_val = msg.data
         self.rt = msg.data - self.rt_initial_val
-        # self.rt_dist = (2 * pi * self.r * self.rt_val) / 135
 
 
     def left_tick(self, msg):
@@ -113,7 +122,7 @@ class ParkingNode(DTROS):
             self.lt_initial_set = True
             self.lt_initial_val = msg.data
         self.lt = msg.data - self.lt_initial_val
-        # self.lt_dist = (2 * pi * self.r * self.lt_val) / 135
+
         
         
     def rcv_img(self, msg):
@@ -126,6 +135,18 @@ class ParkingNode(DTROS):
             if self.img_queue:
                 img = self.img_queue.popleft() 
                 undistorted_img = self.undistort_img(img)
+                
+                delta_rt = self.rt - self.prv_rt
+                delta_lt = self.lt - self.prv_lt
+
+                self.prv_rt = self.rt
+                self.prv_lt = self.lt
+
+                delta_rw_dist = (2 * pi * self.r * delta_rt) / 135
+                delta_lw_dist = (2 * pi * self.r * delta_lt) / 135
+
+                delta_dist_cover = (delta_rw_dist + delta_lw_dist)/2
+                
                 if self.state == "STRAIGHT":
                     tags = self.detector.detect(undistorted_img, True, self._camera_parameters, self.tag_size) 
                     str_id = int(227)
@@ -142,11 +163,12 @@ class ParkingNode(DTROS):
 
                         stop_dist = 0.17
                         if self.parking_spot == 3:
-                            stop_dist = 0.2
+                            stop_dist = 0.18
                         if self.parking_spot == 2:
                             stop_dist = 0.37
                         if self.parking_spot == 4:
-                            stop_dist = 0.4
+                            stop_dist = 0.38
+                            
 
                         if dist < stop_dist:
                             self.state = self.turns[self.parking_spot]
@@ -155,7 +177,13 @@ class ParkingNode(DTROS):
                             self.vel_pub.publish(self.twist)
                             continue
                         else: 
-                            self.velocity = 0.175
+                            if delta_dist_cover == 0:
+                                self.vel_incr += 0.2 
+                            else:
+                                self.vel_incr = 0
+                                
+                            self.velocity = 0.22 + self.vel_incr
+                                
                             
                         center=str_tag.center.tolist()[0] - self.center_bias[0]
                         crop_width = undistorted_img.shape[1]
@@ -183,22 +211,24 @@ class ParkingNode(DTROS):
                             self.twist.v = 0
                             self.twist.omega = abs(self.turn_omega[self.parking_spot]) * 1.8
                             if turn_id == self.turn_ids[3] or turn_id == self.turn_ids[4]:
-                                self.twist.omega = abs(self.turn_omega[self.parking_spot]) * 1.1
+                                self.twist.omega = abs(self.turn_omega[self.parking_spot]) * 1.25
                             self.vel_pub.publish(self.twist)
-                            time.sleep(0.5)
+                            time.sleep(self.time_detect[self.parking_spot])
                             self.twist.v = 0
                             self.twist.omega = 0
                             self.vel_pub.publish(self.twist) 
+                            time.sleep(0.12)
                         elif center > 350:
                             self.twist.v = 0
                             self.twist.omega = -abs(self.turn_omega[self.parking_spot]) * 1.8
                             if turn_id == self.turn_ids[3] or turn_id == self.turn_ids[4]:
-                                self.twist.omega = -abs(self.turn_omega[self.parking_spot]) * 1.1
+                                self.twist.omega = -abs(self.turn_omega[self.parking_spot]) * 1.25
                             self.vel_pub.publish(self.twist)
-                            time.sleep(0.5)
+                            time.sleep(self.time_detect[self.parking_spot])
                             self.twist.v = 0
                             self.twist.omega = 0
                             self.vel_pub.publish(self.twist) 
+                            time.sleep(0.12)
                         else:
                             self.twist.v = 0
                             self.twist.omega = 0
@@ -209,10 +239,11 @@ class ParkingNode(DTROS):
                         self.twist.v = 0
                         self.twist.omega = self.turn_omega[self.parking_spot]
                         self.vel_pub.publish(self.twist)
-                        time.sleep(0.3)
+                        time.sleep(self.time_not_detect[self.parking_spot])
                         self.twist.v = 0
                         self.twist.omega = 0
-                        self.vel_pub.publish(self.twist) 
+                        self.vel_pub.publish(self.twist)
+                        time.sleep(0.12) 
 
                 if self.state == "Park":
                     tags = self.detector.detect(undistorted_img, True, self._camera_parameters, self.tag_size) 
@@ -234,6 +265,8 @@ class ParkingNode(DTROS):
                             self.twist.v = 0
                             self.twist.omega = 0
                             self.vel_pub.publish(self.twist)
+                            time.sleep(0.12)
+                            self.state = "End"
                             continue
                         else: 
                             if self.parking_spot == 1:
@@ -242,6 +275,13 @@ class ParkingNode(DTROS):
                                 self.velocity = 0.17
                             else:
                                 self.velocity = 0.18
+                                
+                            if delta_dist_cover == 0:
+                                self.vel_incr += 0.2 
+                            else:
+                                self.vel_incr = 0
+                                
+                            self.velocity = self.velocity + self.vel_incr
                             
                         center=str_tag.center.tolist()[0] - self.center_bias[self.parking_spot]
                         crop_width = undistorted_img.shape[1]

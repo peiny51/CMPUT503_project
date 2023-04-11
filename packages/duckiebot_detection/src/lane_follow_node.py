@@ -164,7 +164,7 @@ class LaneFollowNode(DTROS):
             if rotation_amount > 0 and self.Th + stopping_offset > target_theta:
                 break
  
-            self.twist1.v = 0.05
+            self.twist1.v = 0.15
             self.twist1.omega = omega_amount
 
             self.vel_pub.publish(self.twist1)
@@ -178,8 +178,8 @@ class LaneFollowNode(DTROS):
         call back function for leader detection
         """
         self.detection = bool_stamped.data 
-        if self.detection:
-            self.velocity = 0.2
+        # if self.detection:
+        #     self.velocity = 0.2
             
             
     def cb_distance(self, distance):
@@ -198,7 +198,7 @@ class LaneFollowNode(DTROS):
             self.id_num = 500
             # self.stop(3)
             # self.id_num = 0
-            # self.offset = -200
+            # self.offset = -180
 
         
     def callback(self, msg):
@@ -247,11 +247,14 @@ class LaneFollowNode(DTROS):
 
                     delta_dist_cover = (delta_rw_dist + delta_lw_dist)/2
                    
-                    if delta_dist_cover > 0.25:  #
-                        # self.stop(0.3)
-                        # self.task_rotation(-pi/4, -2.7, 0)
+                    if delta_dist_cover > 0.45:  #
+                        
+                        # self.task_rotation(-pi/16, -6, 0)
+                        # self.task_rotation(-pi/8, -3, 0)
+                        # self.task_rotation(-pi/20, -6, 0)
+                        # self.task_rotation(-pi/10, -3, 0)
                         # self.straight(501)
-                        # self.proportional = None
+                        self.proportional = None
                         
                         self.offset = 240
                         rospy.loginfo("4 seconds")
@@ -285,14 +288,14 @@ class LaneFollowNode(DTROS):
         if self.id_num == 500:
             print("stopping")
             self.stop(3)
-            self.task_rotation(pi/16, 6, 0)
-            self.task_rotation(pi/8, 3, 0)
-            self.straight(self.id_num)
+            self.task_rotation(pi/20, 6, 0)
+            self.task_rotation(pi/10, 3, 0)
+            self.straight(500)
             self.stop(0.5)
-            self.proportional = None
+            # self.proportional = None
             self.id_num = 0
             self.velocity = 0.23
-            # self.offset = -200
+            self.offset = -200
         if self.id_num == 1000:
             print("stopping")
             self.stop(3)
@@ -359,7 +362,7 @@ class LaneFollowNode(DTROS):
             
             r = rospy.Rate(15)
             
-            while distance < 0.68:
+            while distance < 0.4:
                 delta_rt = self.rt - prv_rt 
                 delta_lt = self.lt - prv_lt
                 
@@ -377,6 +380,9 @@ class LaneFollowNode(DTROS):
         elif id_num == 501:
             self.twist1.omega = 1.3
             loop = 10
+        elif id_num == 111:
+            self.twist1.omega = -0.09
+            loop = 5
         else:
             self.twist1.omega = -0.09
             

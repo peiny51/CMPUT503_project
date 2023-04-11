@@ -94,9 +94,28 @@ class TestNode(DTROS):
         while not rospy.is_shutdown():
             if self.img_queue:
                 img = self.img_queue.popleft()  
-                self.detect_duck(img)
+                # self.detect_duck(img)
+                self.detect_bot(img)
             rate.sleep()
                 
+    
+    def detect_bot(self, img):
+        h, w, d = img.shape
+        # crop = img[300:-1, 0:int(0.65*w), :]
+        crop = img
+        hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+
+        lower_green = np.array([40,50,0])
+        upper_green = np.array([130,255, 255])
+        mask = cv2.inRange(hsv, lower_green, upper_green)
+
+        target_size = np.sum(mask/255.) / mask.size
+        rospy.loginfo(f'bot mask:{target_size}')
+        return target_size
+        # if target_size > 0.1:
+        #     return True
+        # else:
+        #     return False
         
     def detect_ducks(self, img):
         # Enumerate through the detection results

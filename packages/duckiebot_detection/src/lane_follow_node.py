@@ -89,7 +89,7 @@ class LaneFollowNode(DTROS):
         self.D = -0.004
         self.I = 0.008
         self.last_error = 0
-        self.safe_dist = 45
+        self.safe_dist = 48
         self.last_time = rospy.get_time()
         self.l = rospy.get_time()
         self.check = False
@@ -138,7 +138,7 @@ class LaneFollowNode(DTROS):
         rospy.loginfo("Starting rotation task..")
         rospy.loginfo(f'Initial Theta: {self.Th}')
         msg_velocity = Twist2DStamped()
-        rate = rospy.Rate(50)
+        rate = rospy.Rate(10)
 
         initial_theta = self.Th
         
@@ -164,7 +164,7 @@ class LaneFollowNode(DTROS):
             if rotation_amount > 0 and self.Th + stopping_offset > target_theta:
                 break
  
-            self.twist1.v = 0
+            self.twist1.v = 0.05
             self.twist1.omega = omega_amount
 
             self.vel_pub.publish(self.twist1)
@@ -178,15 +178,21 @@ class LaneFollowNode(DTROS):
         call back function for leader detection
         """
         self.detection = bool_stamped.data 
+        if self.detection:
+            self.velocity = 0.2
+            
             
     def cb_distance(self, distance):
         """
         call back function for leader distance
         """
+        
+        # self.velocity = 0.15
+        
         self.distance = 100 * (distance.data)
         rospy.loginfo(f'Distance from the robot in front: {self.distance}')
         
-        if self.distance < self.safe_dist and self.first == True:
+        if self.distance < self.safe_dist:
             self.first = False
             rospy.loginfo('Eng')
             self.id_num = 500
@@ -194,6 +200,7 @@ class LaneFollowNode(DTROS):
             # self.id_num = 0
             # self.offset = -200
 
+        
     def callback(self, msg):
         img = self.jpeg.decode(msg.data)
         crop = img[300:-1, :, :]
@@ -213,6 +220,9 @@ class LaneFollowNode(DTROS):
             if area > max_area:
                 max_idx = i
                 max_area = area
+                
+        prv_rt = 0
+        prv_lt = 0
 
         if max_idx != -1:
             M = cv2.moments(contours[max_idx])
@@ -220,25 +230,28 @@ class LaneFollowNode(DTROS):
                 cx = int(M['m10'] / M['m00'])
                 cy = int(M['m01'] / M['m00'])
                 
-                if (self.offset in [-180]) and self.id_num == 0:
+                if (self.offset in [-200]) and self.id_num == 0:
                     rospy.loginfo("hehe")
                     if self.check == False:
                         self.l = rospy.get_time()
+                        prv_rt = self.rt
+                        prv_lt = self.lt
                     duration = (rospy.get_time() - self.l)
                     self.bais = 0
-                    # if duration > 1:  #
-                    #     self.offset = 0
-                    #     rospy.loginfo("2 seconds")
                     
-                    # if duration > 2:  #
-                    #     self.offset = -180
-                    #     rospy.loginfo("2 seconds")
-                        
-                    if duration > 2:  #
-                        self.stop(0.2)
-                        self.task_rotation(-pi/4, -2.7, 0)
-                        self.straight(501)
-                        self.proportional = None
+                    delta_rt = self.rt - prv_rt 
+                    delta_lt = self.lt - prv_lt
+                
+                    delta_rw_dist = (2 * pi * self.r * delta_rt) / 135
+                    delta_lw_dist = (2 * pi * self.r * delta_lt) / 135
+
+                    delta_dist_cover = (delta_rw_dist + delta_lw_dist)/2
+                   
+                    if delta_dist_cover > 0.25:  #
+                        # self.stop(0.3)
+                        # self.task_rotation(-pi/4, -2.7, 0)
+                        # self.straight(501)
+                        # self.proportional = None
                         
                         self.offset = 240
                         rospy.loginfo("4 seconds")
@@ -272,12 +285,14 @@ class LaneFollowNode(DTROS):
         if self.id_num == 500:
             print("stopping")
             self.stop(3)
-            self.task_rotation(pi/4, 3, 0)
+            self.task_rotation(pi/16, 6, 0)
+            self.task_rotation(pi/8, 3, 0)
             self.straight(self.id_num)
+            self.stop(0.5)
             self.proportional = None
             self.id_num = 0
             self.velocity = 0.23
-            self.offset = -180
+            # self.offset = -200
         if self.id_num == 1000:
             print("stopping")
             self.stop(3)
@@ -336,11 +351,32 @@ class LaneFollowNode(DTROS):
         if id_num == 56:
             self.twist1.omega = -0.1
         elif id_num == 500:
-            self.twist1.omega = -0.2
-            loop = 4
+            
+            prv_rt = self.rt
+            prv_lt = self.lt
+            
+            distance = 0
+            
+            r = rospy.Rate(15)
+            
+            while distance < 0.68:
+                delta_rt = self.rt - prv_rt 
+                delta_lt = self.lt - prv_lt
+                
+                delta_rw_dist = (2 * pi * self.r * delta_rt) / 135
+                delta_lw_dist = (2 * pi * self.r * delta_lt) / 135
+
+                distance = (delta_rw_dist + delta_lw_dist)/2
+                
+                self.twist1.v = 0.23
+                self.twist1.omega = -2
+                
+                self.vel_pub.publish(self.twist1)
+                r.sleep()
+            return
         elif id_num == 501:
-            self.twist1.omega = 1.6
-            loop = 5
+            self.twist1.omega = 1.3
+            loop = 10
         else:
             self.twist1.omega = -0.09
             
@@ -393,7 +429,7 @@ class LaneFollowNode(DTROS):
             loop = 15
         if id_num == 500:
             self.twist1.v = 0.05
-            self.twist1.omega = 2.7
+            self.twist1.omega = 4
             loop = 7
         rate = rospy.Rate(5)
         for i in range(loop):     

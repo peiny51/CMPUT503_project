@@ -259,7 +259,7 @@ class LaneFollowNode(DTROS):
                         
                     #     self.offset = -90 -  (delta_dist_cover * 1)
                    
-                    if delta_dist_cover > 40:  #
+                    if delta_dist_cover > 25:  #
                         
                         # self.task_rotation(-pi/16, -6, 0)
                         # self.task_rotation(-pi/8, -3, 0)
@@ -268,13 +268,30 @@ class LaneFollowNode(DTROS):
                         # self.straight(501)
                         # self.last_error = 0
                         
-                        self.offset = 240
+                        self.id_num = 999
+                        
+                        
                         rospy.loginfo("4 seconds")
                         self.check = False
                         self.first = True
                         # self.bais = -0.09
-                        # self.last_error = 0
+                        self.last_error = 0
                         self.eng = False
+                        
+                        self.Th = 0
+                        self.task_rotation(-pi/9, -5, 0)
+                        self.stop(0.1)
+                        self.straight(600)
+                        self.stop(0.1)
+                        prv_t = -self.Th
+                        self.Th = 0
+                        self.task_rotation(prv_t, 5, 0)
+                        self.stop(0.1)
+                        
+                        self.offset = 240
+                        
+                        self.id_num = 0
+                        
                     self.check = True
                     
                 self.proportional = cx - int(crop_width / 2) + self.offset
@@ -300,6 +317,8 @@ class LaneFollowNode(DTROS):
         # rospy.loginfo(f'## Tag ID detected in controller: {self.id_num}')
         if self.id_num == 9999:
             rospy.signal_shutdown("Done!")
+        if self.id_num == 999:
+            return
         if self.id_num == 500:
             print("stopping")
             self.stop(2)

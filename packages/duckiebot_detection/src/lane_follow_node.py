@@ -89,12 +89,13 @@ class LaneFollowNode(DTROS):
         self.D = -0.004
         self.I = 0.008
         self.last_error = 0
-        self.safe_dist = 48
+        self.safe_dist = 50
         self.last_time = rospy.get_time()
         self.l = rospy.get_time()
         self.check = False
         self.first = True
         self.bias = 0 # -0.09
+        self.eng = False
 
         # Wait a little while before sending motor commands
         rospy.Rate(0.20).sleep()
@@ -192,13 +193,15 @@ class LaneFollowNode(DTROS):
         self.distance = 100 * (distance.data)
         rospy.loginfo(f'Distance from the robot in front: {self.distance}')
         
-        if self.distance < self.safe_dist:
+        if self.distance < self.safe_dist and self.first == True:
             self.first = False
             rospy.loginfo('Eng')
             self.id_num = 500
+            self.eng = True
             # self.stop(3)
             # self.id_num = 0
-            # self.offset = -180
+            # self.offset = -160
+            
 
         
     def callback(self, msg):
@@ -221,50 +224,62 @@ class LaneFollowNode(DTROS):
                 max_idx = i
                 max_area = area
                 
-        prv_rt = 0
-        prv_lt = 0
-
+    
         if max_idx != -1:
             M = cv2.moments(contours[max_idx])
             try:
                 cx = int(M['m10'] / M['m00'])
                 cy = int(M['m01'] / M['m00'])
                 
-                if (self.offset in [-200]) and self.id_num == 0:
-                    rospy.loginfo("hehe")
+                if self.offset < 240 and self.id_num == 0:
+                    # rospy.loginfo("hehe")
                     if self.check == False:
                         self.l = rospy.get_time()
-                        prv_rt = self.rt
-                        prv_lt = self.lt
+                        self.prv_rt = self.rt
+                        self.prv_lt = self.lt
                     duration = (rospy.get_time() - self.l)
                     self.bais = 0
                     
-                    delta_rt = self.rt - prv_rt 
-                    delta_lt = self.lt - prv_lt
+                    delta_rt = self.rt - self.prv_rt 
+                    delta_lt = self.lt - self.prv_lt
                 
                     delta_rw_dist = (2 * pi * self.r * delta_rt) / 135
                     delta_lw_dist = (2 * pi * self.r * delta_lt) / 135
 
                     delta_dist_cover = (delta_rw_dist + delta_lw_dist)/2
+                    
+                    delta_dist_cover = int(delta_dist_cover * 100) + 1
+                    
+                    rospy.loginfo(f'Dist: {delta_dist_cover}')
+                    
+                    self.velocity = 0.2
                    
-                    if delta_dist_cover > 0.45:  #
+                    # if delta_dist_cover >= 0 and delta_dist_cover < 30:
+                    #     self.velocity = 0.2
+                        
+                    #     self.offset = -90 -  (delta_dist_cover * 1)
+                   
+                    if delta_dist_cover > 40:  #
                         
                         # self.task_rotation(-pi/16, -6, 0)
                         # self.task_rotation(-pi/8, -3, 0)
                         # self.task_rotation(-pi/20, -6, 0)
-                        # self.task_rotation(-pi/10, -3, 0)
+                        # self.task_rotation(-pi/6, -3, 0)
                         # self.straight(501)
-                        self.proportional = None
+                        # self.last_error = 0
                         
                         self.offset = 240
                         rospy.loginfo("4 seconds")
                         self.check = False
                         self.first = True
                         # self.bais = -0.09
-                        self.last_error = 0
+                        # self.last_error = 0
+                        self.eng = False
                     self.check = True
-                    rospy.loginfo("hehe2")
+                    
                 self.proportional = cx - int(crop_width / 2) + self.offset
+                
+                rospy.loginfo(f'offset: {self.offset}; proportional: {self.proportional}')
                 if DEBUG:
                     cv2.drawContours(crop, contours, max_idx, (0, 255, 0), 3)
                     cv2.circle(crop, (cx, cy), 7, (0, 0, 255), -1)
@@ -287,15 +302,25 @@ class LaneFollowNode(DTROS):
             rospy.signal_shutdown("Done!")
         if self.id_num == 500:
             print("stopping")
-            self.stop(3)
-            self.task_rotation(pi/20, 6, 0)
-            self.task_rotation(pi/10, 3, 0)
-            self.straight(500)
-            self.stop(0.5)
-            # self.proportional = None
+            self.stop(2)
+            self.Th = 0
+            self.task_rotation(pi/9, 5, 0)
+            self.stop(0.1)
+            self.straight(600)
+            self.stop(0.1)
+            prv_t = self.Th
+            self.Th = 0
+            self.task_rotation(-prv_t, -5, 0)
+            self.stop(0.1)
+            # self.task_rotation(pi/10, 3, 0)
+            # self.straight(500)
+            
+            self.last_error = 0
             self.id_num = 0
             self.velocity = 0.23
-            self.offset = -200
+            self.offset = -210
+
+            # self.stop(0.5)
         if self.id_num == 1000:
             print("stopping")
             self.stop(3)
@@ -353,7 +378,7 @@ class LaneFollowNode(DTROS):
         loop = 15
         if id_num == 56:
             self.twist1.omega = -0.1
-        elif id_num == 500:
+        elif id_num == 600:
             
             prv_rt = self.rt
             prv_lt = self.lt
@@ -362,7 +387,7 @@ class LaneFollowNode(DTROS):
             
             r = rospy.Rate(15)
             
-            while distance < 0.4:
+            while distance < 0.23:
                 delta_rt = self.rt - prv_rt 
                 delta_lt = self.lt - prv_lt
                 
@@ -372,7 +397,7 @@ class LaneFollowNode(DTROS):
                 distance = (delta_rw_dist + delta_lw_dist)/2
                 
                 self.twist1.v = 0.23
-                self.twist1.omega = -2
+                self.twist1.omega = -0.09
                 
                 self.vel_pub.publish(self.twist1)
                 r.sleep()

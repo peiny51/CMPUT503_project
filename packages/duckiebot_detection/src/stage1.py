@@ -118,7 +118,7 @@ class TagDetector(DTROS):
     
     
     def process_img(self, img):
-        rospy.loginfo(f'd: {self.d}')
+        # rospy.loginfo(f'd: {self.d}')
         min_dist = -1
         target_size = self.detect_intersection(img)
         
@@ -138,13 +138,13 @@ class TagDetector(DTROS):
                 self.id_pub.publish(self.next_intersection)
                 self.next_intersection = -1
             elif blue_ahead > 0.2 and self.next_intersection == 163:  # 0.15
-                rospy.loginfo('stops')
+                # rospy.loginfo('stops')
                 self.id_pub.publish(STOP_UNTIL)
-                rospy.loginfo('stops2')
+                # rospy.loginfo('stops2')
                 if duck_ahead < 0.07:
-                    rospy.loginfo('begin publish 1')
+                    # rospy.loginfo('begin publish 1')
                     self.id_pub.publish(1)  # driving
-                    rospy.loginfo('after publish 1')
+                    # rospy.loginfo('after publish 1')
                     self.next_intersection = -1
                     # self.d = 100
                 
@@ -197,7 +197,7 @@ class TagDetector(DTROS):
         # target_size1 = np.sum(mask_or/255.) / mask_or.size
         
         target_size = np.sum(mask/255.) / mask.size
-        rospy.loginfo(f'orange mask:{target_size}')
+        # rospy.loginfo(f'orange mask:{target_size}')
         return target_size
         # if target_size > 0.1:
         #     return True
@@ -234,7 +234,7 @@ class TagDetector(DTROS):
         #     rect_img_msg = self.bridge.cv2_to_compressed_imgmsg(img)
         #     self.image_pub.publish(rect_img_msg)
         
-        rospy.loginfo(f"detect: {detect}")
+        # rospy.loginfo(f"detect: {detect}")
         return True
         
     def detect_intersection(self, img):
@@ -267,7 +267,7 @@ class TagDetector(DTROS):
         target_size = np.sum(mask/255.) / mask.size
 
         
-        rospy.loginfo(f'blue mask:{target_size}')
+        # rospy.loginfo(f'blue mask:{target_size}')
         return target_size
         # if target_size > 0.2:
         #     return True

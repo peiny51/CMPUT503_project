@@ -502,8 +502,8 @@ class LaneFollowNode(DTROS):
             distance = 0
             
             r = rospy.Rate(15)
-            
-            while distance < 0.15:
+            # go straight for some distance
+            while distance < 0.06:
                 delta_rt = self.rt - prv_rt 
                 delta_lt = self.lt - prv_lt
                 
@@ -512,7 +512,7 @@ class LaneFollowNode(DTROS):
 
                 distance = (delta_rw_dist + delta_lw_dist)/2
                 
-                self.twist1.v = 0.23
+                self.twist1.v = 0.15
                 self.twist1.omega = -0.09
                 
                 self.vel_pub.publish(self.twist1)

@@ -76,7 +76,7 @@ class TagDetector(DTROS):
         self.tag_id_lt = [50]
         self.tag_id_rt = [48]
         self.tag_id_stop = [163, 38, 21]   # 21 is in grad room
-        self.turning_tags = [48, 50, 56, 163, 21]
+        self.turning_tags = [48, 50, 56, 163, 21, 38]
         
         self.img_queue = deque(maxlen=1)
 
@@ -175,7 +175,7 @@ class TagDetector(DTROS):
                     # self.d = min_dist
                     if self.next_intersection == -1 and min_tag_id in self.turning_tags:
                         self.next_intersection = min_tag_id
-                        # rospy.loginfo(f'Intersection set to: {min_tag_id}')
+                        rospy.loginfo(f'Intersection set to: {min_tag_id}')
                             
             self.b = 0
             self.d = 0        

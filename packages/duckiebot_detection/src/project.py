@@ -24,6 +24,8 @@ from sensor_msgs.msg import CompressedImage, CameraInfo
 from geometry_msgs.msg import Transform, Vector3, Quaternion
 from std_msgs.msg import String, Float32, Int32
 
+from math import pi
+
 LEFT = 50
 RIGHT = 48
 STOP = 1000 
@@ -39,14 +41,14 @@ STOP_UNTIL = 2000
 # 75   - parking 4
 # 227 - parking entrance
 
-class Project(DTROS):
+class TagDetector(DTROS):
     def __init__(self, node_name):
-        super(Project, self).__init__(node_name=node_name, node_type=NodeType.GENERIC)
+        super(TagDetector, self).__init__(node_name=node_name, node_type=NodeType.GENERIC)
         name = os.environ['VEHICLE_NAME']
         self.image_sub = rospy.Subscriber(f'/{name}/camera_node/image/compressed', CompressedImage, self.rcv_img,  queue_size = 1)  
         self.image_pub = rospy.Publisher(f'/{name}/digit_detector_node/image/compressed', CompressedImage,  queue_size = 1) 
         self.id_pub = rospy.Publisher("/" + name + "/april_tag_id", Int32, queue_size=1)
-        
+    
         
         self.img_queue = deque(maxlen=1)
         self.rectify_alpha = rospy.get_param("~rectify_alpha", 0.0)
@@ -64,6 +66,8 @@ class Project(DTROS):
         self.refine_edges = rospy.get_param("~refine_edges", 1)
         self.decode_sharpening = rospy.get_param("~decode_sharpening", 0.25)
         self.tag_size = rospy.get_param("~tag_size", 0.065)
+        
+        
 
         # self.tag_id_uofa = [93, 94, 200, 201]  # very outer 
         self.tag_id_lt = [50]
@@ -92,6 +96,7 @@ class Project(DTROS):
         
         
         
+        
     def rcv_img(self, msg):
         image = self.jpeg.decode(msg.data)
         self.img_queue.append(image)
@@ -110,7 +115,7 @@ class Project(DTROS):
     
     
     def process_img(self, img):
-        rospy.loginfo(f'd: {self.d}')
+        # rospy.loginfo(f'd: {self.d}')
         min_dist = -1
         target_size = self.detect_intersection(img)
         
@@ -129,14 +134,14 @@ class Project(DTROS):
                 # rospy.loginfo(f'At intersection, target size: {target_size}')
                 self.id_pub.publish(self.next_intersection)
                 self.next_intersection = -1
-            elif blue_ahead > 0.2 and self.next_intersection == 21:  # 0.15
-                rospy.loginfo('stops')
+            elif blue_ahead > 0.2 and self.next_intersection == 163:  # 0.15
+                # rospy.loginfo('stops')
                 self.id_pub.publish(STOP_UNTIL)
-                rospy.loginfo('stops2')
+                # rospy.loginfo('stops2')
                 if duck_ahead < 0.07:
-                    rospy.loginfo('begin publish 1')
+                    # rospy.loginfo('begin publish 1')
                     self.id_pub.publish(1)  # driving
-                    rospy.loginfo('after publish 1')
+                    # rospy.loginfo('after publish 1')
                     self.next_intersection = -1
                     # self.d = 100
                 
@@ -189,7 +194,7 @@ class Project(DTROS):
         # target_size1 = np.sum(mask_or/255.) / mask_or.size
         
         target_size = np.sum(mask/255.) / mask.size
-        rospy.loginfo(f'orange mask:{target_size}')
+        # rospy.loginfo(f'orange mask:{target_size}')
         return target_size
         # if target_size > 0.1:
         #     return True
@@ -226,7 +231,7 @@ class Project(DTROS):
         #     rect_img_msg = self.bridge.cv2_to_compressed_imgmsg(img)
         #     self.image_pub.publish(rect_img_msg)
         
-        rospy.loginfo(f"detect: {detect}")
+        # rospy.loginfo(f"detect: {detect}")
         return True
         
     def detect_intersection(self, img):
@@ -259,7 +264,7 @@ class Project(DTROS):
         target_size = np.sum(mask/255.) / mask.size
 
         
-        rospy.loginfo(f'blue mask:{target_size}')
+        # rospy.loginfo(f'blue mask:{target_size}')
         return target_size
         # if target_size > 0.2:
         #     return True
@@ -308,6 +313,6 @@ class Project(DTROS):
         return cam_info
 
 if __name__ == '__main__': 
-    project = Project(node_name='project')
-    project.run()
+    tag_detector = TagDetector(node_name='tag_detector')
+    tag_detector.run()
     rospy.spin()

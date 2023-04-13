@@ -71,6 +71,8 @@ class LaneFollowNode(DTROS):
         self.sub_distance_to_robot_ahead = rospy.Subscriber("/{}/duckiebot_distance_node/distance".format(self.host), Float32, self.cb_distance, queue_size=1)
         
         self.r = rospy.get_param(f'/{name}/kinematics_node/radius', 100)
+        
+        self.pub_parking_detection = rospy.Publisher("/" + name + "/parking_detection", BoolStamped,queue_size=1)
 
         self.jpeg = TurboJPEG()
         self.id_num = 0 
@@ -169,10 +171,10 @@ class LaneFollowNode(DTROS):
             self.twist1.omega = omega_amount
 
             self.vel_pub.publish(self.twist1)
-            rospy.loginfo(f'Self.Th: {self.Th}, target_th: {target_theta}')
+            # rospy.loginfo(f'Self.Th: {self.Th}, target_th: {target_theta}')
             rate.sleep()
 
-        rospy.loginfo(f'Final Theta: {self.Th}')
+        # rospy.loginfo(f'Final Theta: {self.Th}')
     
     def cb_detection(self, bool_stamped):
         """
@@ -191,7 +193,7 @@ class LaneFollowNode(DTROS):
         # self.velocity = 0.15
         
         self.distance = 100 * (distance.data)
-        rospy.loginfo(f'Distance from the robot in front: {self.distance}')
+        # rospy.loginfo(f'Distance from the robot in front: {self.distance}')
         
         if self.distance < self.safe_dist and self.first == True:
             self.first = False
@@ -250,7 +252,7 @@ class LaneFollowNode(DTROS):
                     
                     delta_dist_cover = int(delta_dist_cover * 100) + 1
                     
-                    rospy.loginfo(f'Dist: {delta_dist_cover}')
+                    # rospy.loginfo(f'Dist: {delta_dist_cover}')
                     
                     self.velocity = 0.2
                    
@@ -296,7 +298,7 @@ class LaneFollowNode(DTROS):
                     
                 self.proportional = cx - int(crop_width / 2) + self.offset
                 
-                rospy.loginfo(f'offset: {self.offset}; proportional: {self.proportional}')
+                # rospy.loginfo(f'offset: {self.offset}; proportional: {self.proportional}')
                 if DEBUG:
                     cv2.drawContours(crop, contours, max_idx, (0, 255, 0), 3)
                     cv2.circle(crop, (cx, cy), 7, (0, 0, 255), -1)
@@ -369,9 +371,24 @@ class LaneFollowNode(DTROS):
             self.straight2(self.id_num)
             self.velocity = 0.23
             self.id_num = 0
-
+        elif self.id_num == 38:
+            # parking
+            self.stop(2)
+            print("parking")               
+            # self.straight2(self.id_num)
+            self.velocity = 0.23
+            parking_detection_flag = BoolStamped()
+            parking_detection_flag.data = True
+            self.pub_parking_detection.publish(parking_detection_flag)
+            self.id_num = 39
+            return
+        elif self.id_num == 39:
+            self.velocity = 0
+            self.twist1.v = 0
+            self.twist1.omega = 0
+            return
         else: 
-            print("driving2")
+            # print("driving2")
             self.drive()
             
             
@@ -395,8 +412,29 @@ class LaneFollowNode(DTROS):
         self.twist1.omega = 0
         
         loop = 15
-        if id_num == 56:
-            self.twist1.omega = -0.1
+        if id_num == 56: ## STAGE 1 STRAIGHT
+            prv_rt = self.rt
+            prv_lt = self.lt
+            
+            distance = 0
+            
+            r = rospy.Rate(15)
+            
+            while distance < 0.42:
+                delta_rt = self.rt - prv_rt 
+                delta_lt = self.lt - prv_lt
+                
+                delta_rw_dist = (2 * pi * self.r * delta_rt) / 135
+                delta_lw_dist = (2 * pi * self.r * delta_lt) / 135
+
+                distance = (delta_rw_dist + delta_lw_dist)/2
+                
+                self.twist1.v = 0.23
+                self.twist1.omega = 0.2
+                
+                self.vel_pub.publish(self.twist1)
+                r.sleep()
+            return
         elif id_num == 600:
             
             prv_rt = self.rt
@@ -458,8 +496,32 @@ class LaneFollowNode(DTROS):
     def right(self, id_num):
         loop = 8
         if id_num == 48:
+            prv_rt = self.rt
+            prv_lt = self.lt
+            
+            distance = 0
+            
+            r = rospy.Rate(15)
+            
+            while distance < 0.15:
+                delta_rt = self.rt - prv_rt 
+                delta_lt = self.lt - prv_lt
+                
+                delta_rw_dist = (2 * pi * self.r * delta_rt) / 135
+                delta_lw_dist = (2 * pi * self.r * delta_lt) / 135
+
+                distance = (delta_rw_dist + delta_lw_dist)/2
+                
+                self.twist1.v = 0.23
+                self.twist1.omega = -0.09
+                
+                self.vel_pub.publish(self.twist1)
+                r.sleep()
+            
             self.twist1.v = 0.2
-            self.twist1.omega = -1
+            self.twist1.omega = -1   #-0.4
+            
+            
         if id_num == 500:
             self.twist1.v = 0.05
             self.twist1.omega = -2.6
@@ -474,9 +536,9 @@ class LaneFollowNode(DTROS):
     def left(self, id_num):
         loop = 8
         if id_num == 50:
-            self.twist1.v = 0.2
-            self.twist1.omega = 1
-            loop = 15
+            self.twist1.v = 0.24
+            self.twist1.omega = 1.8
+            loop = 12
         if id_num == 500:
             self.twist1.v = 0.05
             self.twist1.omega = 4

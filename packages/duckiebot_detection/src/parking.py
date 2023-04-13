@@ -12,7 +12,7 @@ from turbojpeg import TurboJPEG
 from collections import deque
 from turbojpeg import TurboJPEG, TJPF_GRAY
 from dt_apriltags import Detector
-from duckietown_msgs.msg import WheelEncoderStamped, Twist2DStamped
+from duckietown_msgs.msg import WheelEncoderStamped, Twist2DStamped, BoolStamped
 from duckietown_msgs.srv import GetVariable
 
 import rospy
@@ -31,11 +31,13 @@ class ParkingNode(DTROS):
         super(ParkingNode, self).__init__(node_name=node_name, node_type=NodeType.GENERIC)
         name = os.environ['VEHICLE_NAME']
         self.host = str(os.environ['VEHICLE_NAME'])
+        self.start = False
         
         self.image_sub = rospy.Subscriber(f'/{name}/camera_node/image/compressed', CompressedImage, self.rcv_img,  queue_size = 1)   
         self.vel_pub = rospy.Publisher("/" + name + "/car_cmd_switch_node/cmd",
                                        Twist2DStamped,
                                        queue_size=1)
+        self.pub_parking_detection = rospy.Subscriber("/" + name + "/parking_detection", BoolStamped, self.cb_parking_detection, queue_size=1)
         
         self.reset()
 
@@ -74,14 +76,14 @@ class ParkingNode(DTROS):
             decode_sharpening=self.decode_sharpening,) 
         
 
-        self.parking_spot = 2
+        self.parking_spot = 4
         self.state = "STRAIGHT"
         self.turns = ["D", "Turn1", "Turn2", "Turn3", "Turn4"]
         self.turn_ids = [0, 207, 226, 228, 75]
-        self.turn_omega = [0, 3, 3, -2.7, -2.6]
-        self.center_bias = [15, 30, 0, -15, -20]
-        self.time_detect = [0.5, 0.5, 0.5, 0.47, 0.47]
-        self.time_not_detect = [0.5, 0.45, 0.45, 0.35, 0.35]
+        self.turn_omega = [0, 3.5, 3.5, -3.1, -3]
+        self.center_bias = [15, 30, 0, -12, -40]
+        self.time_detect = [0.5, 0.55, 0.55, 0.45, 0.45]
+        self.time_not_detect = [0.5, 0.65, 0.65, 0.5, 0.5]
 
         # PID Variables
         self.proportional = None
@@ -123,6 +125,9 @@ class ParkingNode(DTROS):
             self.lt_initial_val = msg.data
         self.lt = msg.data - self.lt_initial_val
 
+    def cb_parking_detection(self, msg):
+        if msg.data:
+            self.start = True
         
         
     def rcv_img(self, msg):
@@ -132,7 +137,7 @@ class ParkingNode(DTROS):
     def run(self): 
         rate = rospy.Rate(5) # 5Hz== 10
         while not rospy.is_shutdown():
-            if self.img_queue:
+            if self.start and self.img_queue:
                 img = self.img_queue.popleft() 
                 undistorted_img = self.undistort_img(img)
                 
@@ -163,11 +168,11 @@ class ParkingNode(DTROS):
 
                         stop_dist = 0.17
                         if self.parking_spot == 3:
-                            stop_dist = 0.18
+                            stop_dist = 0.185
                         if self.parking_spot == 2:
                             stop_dist = 0.37
                         if self.parking_spot == 4:
-                            stop_dist = 0.38
+                            stop_dist = 0.37
                             
 
                         if dist < stop_dist:
@@ -178,11 +183,11 @@ class ParkingNode(DTROS):
                             continue
                         else: 
                             if delta_dist_cover == 0:
-                                self.vel_incr += 0.2 
+                                self.vel_incr += 0.06 
                             else:
                                 self.vel_incr = 0
                                 
-                            self.velocity = 0.22 + self.vel_incr
+                            self.velocity = 0.18 + self.vel_incr
                                 
                             
                         center=str_tag.center.tolist()[0] - self.center_bias[0]
@@ -211,7 +216,7 @@ class ParkingNode(DTROS):
                             self.twist.v = 0
                             self.twist.omega = abs(self.turn_omega[self.parking_spot]) * 1.8
                             if turn_id == self.turn_ids[3] or turn_id == self.turn_ids[4]:
-                                self.twist.omega = abs(self.turn_omega[self.parking_spot]) * 1.25
+                                self.twist.omega = abs(self.turn_omega[self.parking_spot]) * 1.35
                             self.vel_pub.publish(self.twist)
                             time.sleep(self.time_detect[self.parking_spot])
                             self.twist.v = 0
@@ -222,7 +227,7 @@ class ParkingNode(DTROS):
                             self.twist.v = 0
                             self.twist.omega = -abs(self.turn_omega[self.parking_spot]) * 1.8
                             if turn_id == self.turn_ids[3] or turn_id == self.turn_ids[4]:
-                                self.twist.omega = -abs(self.turn_omega[self.parking_spot]) * 1.25
+                                self.twist.omega = -abs(self.turn_omega[self.parking_spot]) * 1.35
                             self.vel_pub.publish(self.twist)
                             time.sleep(self.time_detect[self.parking_spot])
                             self.twist.v = 0
@@ -267,17 +272,20 @@ class ParkingNode(DTROS):
                             self.vel_pub.publish(self.twist)
                             time.sleep(0.12)
                             self.state = "End"
+                            self.velocity = 0
+                            self.vel_incr = 0
+                            # rospy.signal_shutdown("Done!")
                             continue
                         else: 
                             if self.parking_spot == 1:
-                                self.velocity = 0.2
-                            elif self.parking_spot == 2:
                                 self.velocity = 0.17
+                            elif self.parking_spot == 2:
+                                self.velocity = 0.15
                             else:
-                                self.velocity = 0.18
+                                self.velocity = 0.16
                                 
                             if delta_dist_cover == 0:
-                                self.vel_incr += 0.2 
+                                self.vel_incr += 0.06
                             else:
                                 self.vel_incr = 0
                                 
@@ -285,7 +293,7 @@ class ParkingNode(DTROS):
                             
                         center=str_tag.center.tolist()[0] - self.center_bias[self.parking_spot]
                         crop_width = undistorted_img.shape[1]
-                        self.proportional = ((center) - int(crop_width / 2)) / 4
+                        self.proportional = ((center) - int(crop_width / 2)) / 3.5
                     else:
                         self.velocity = 0
 

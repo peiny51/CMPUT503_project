@@ -4,7 +4,7 @@
 
     <node  name="duckiebot_detection_node" pkg="$(arg pkg_name)" type="duckiebot_detection_node.py" output="screen"></node>
     <node  name="duckiebot_distance_node" pkg="$(arg pkg_name)" type="duckiebot_distance_node.py" output="screen" ></node>
-    <!-- <node name="parking_node" pkg="$(arg pkg_name)" type="parking.py" output="screen" required="true"></node> -->
+    <node name="parking_node" pkg="$(arg pkg_name)" type="parking.py" output="screen" required="true"></node>
     <node name="tag_detector" pkg="$(arg pkg_name)" type="stage1.py" output="screen" required="true"></node>
     <node name="lanefollow_node" pkg="$(arg pkg_name)" type="lane_follow_node.py" output="screen" required="true"></node>
     <!-- <node  name="test_node" pkg="$(arg pkg_name)" type="test.py" output="screen" ></node> -->
